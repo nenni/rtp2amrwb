@@ -87,7 +87,7 @@ def amrPayload2Storage_EfficientMode(payload):
     mode = amr[5:9]
     #print(mode.uint)
     #assert mode.uint >=0 and mode.uint <=8
-    if not (mode.uint >= 0 and mode.uint <= 9):
+    if not (mode.uint >= 0 and mode.uint <= 8):
         retrn = ''
     else:
         qual = amr[9:10]
