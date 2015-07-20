@@ -4,14 +4,13 @@ from bitstring import BitArray
 import pyshark
 
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 __author__ = "Nikolay Nenchev"
 
 '''
 Created by: Nikolay Nenchev
 Date: 2015/01/02
 Filename: rtp2amrwb.py
-Version: 0.2.2
 
 Usage: python rtp2amrwb.py -i <inputfile> -o <outputfile>
 inputfile - one way or two way rtp stream pcap file,
@@ -43,10 +42,10 @@ Modification done in order to process properly AMR-WB
 # AMR 7.4 kbps (FT=4).  The encoded speech bits, d(0) to d(147), are
 # arranged in descending sensitivity order according to [2].  Finally,
 # two padding bits (P) are added to the end as padding to make the
-#   payload octet aligned.
-#    0                   1                   2                   3
-#    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-#   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+# payload octet aligned.
+# 0                   1                   2                   3
+# 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+# +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 #   | CMR=15|0| FT=4  |1|d(0)                                       |
 #   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 #   |                                                               |
@@ -76,16 +75,16 @@ Modification done in order to process properly AMR-WB
 
 def amrPayload2Storage_EfficientMode(payload):
     #AMR-NR
-    #bitlen = [95,103,118,134,148,159,204,244,39]
+    bitlen = [95, 103, 118, 134, 148, 159, 204, 244, 39]
     #AMR-WB TS 26.201 - total bits
-    bitlen = [132, 177, 253, 285, 317, 365, 397, 461, 477, 40]
+    #bitlen = [132, 177, 253, 285, 317, 365, 397, 461, 477, 40]
     amr = BitArray(bytes=payload)
     cmr = amr[0:4]
     mode = amr[5:9]
     #print(mode.uint)
     #assert mode.uint >=0 and mode.uint <=8
     if not (mode.uint >= 0 and mode.uint <= 8):
-        retrn = ''
+        return
     else:
         qual = amr[9:10]
         voice = amr[10:10 + bitlen[mode.uint]]
@@ -96,36 +95,39 @@ def amrPayload2Storage_EfficientMode(payload):
         storage.append('0b00')  # padding
         assert storage.len == 8, "check length of storage header is one byte"
         storage.append(voice)
-        #return storage.tobytes()
-        retrn = storage.tobytes()
-    return retrn
+        return storage.tobytes()
+
 
 
 def writeBinaryAmrWB(newfile):
     with open(newfile, "w+b") as f:
-        f.write("#!AMR-WB\n")
-        #f.write("#!AMR\n")
+        # f.write("#!AMR-WB\n")
+        f.write("#!AMR\n")
 
 
 def appendBinaryAmrWB(newfile, nbytes):
-    if nbytes != '':
-        with open(newfile, "a+b") as f:
-            f.write(nbytes)
-
+    with open(newfile, "a+b") as f:
+        f.write(nbytes)
+    f.close()
 
 def dump_rtp_payload(inputfile, outputfile):
     writeBinaryAmrWB(outputfile)
     cap = pyshark.FileCapture(inputfile, display_filter='amr or rtp')
+    awb = ''
     for i in cap:
         try:
-            rtp = i[3]
+            # i.pretty_print()
+            rtp = i[3] # without vlan layer in pcap
+            # rtp = i[4] # with vlan layer in pcap
             if rtp.payload:
-                #print(rtp.payload)
+                # print(rtp.payload)
                 result = rtp.payload.replace(':', '').decode('hex')
-                appendBinaryAmrWB(outputfile, amrPayload2Storage_EfficientMode(result))
+                awb = awb + amrPayload2Storage_EfficientMode(result)
+                # appendBinaryAmrWB(outputfile, amrPayload2Storage_EfficientMode(result))
         except:
-            #print("ne razpoznava rtp")
+            # print("ne razpoznava rtp")
             pass
+    return awb
 
 
 def main():
@@ -141,7 +143,8 @@ def main():
     print 'Input file is:', input_file
     print 'Output file is:', output_file
 
-    dump_rtp_payload(input_file, output_file)
+    format_awb = dump_rtp_payload(input_file, output_file)
+    appendBinaryAmrWB(output_file, format_awb)
 
 
 if __name__ == "__main__":
